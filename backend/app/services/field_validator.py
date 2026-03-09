@@ -62,12 +62,9 @@ class FieldValidator:
             # Só valida como currency se não for campo de valor por extenso
             return "currency"
         elif "number" in field_id_lower or "numero" in field_id_lower:
-<<<<<<< HEAD
-=======
             # Campos de quadra e lote podem conter letras, tratar como texto
             if "quadra" in field_id_lower or "lote" in field_id_lower:
                 return "text"
->>>>>>> 116c4317a7eb8cb5c7a3acf431133d3d0646fec7
             return "number"
         
         return "text"
