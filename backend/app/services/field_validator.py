@@ -61,10 +61,26 @@ class FieldValidator:
         elif ("currency" in field_id_lower or "valor" in field_id_lower or "preco" in field_id_lower) and "extenso" not in field_id_lower:
             # Só valida como currency se não for campo de valor por extenso
             return "currency"
+        elif self._is_numero_endereco_ou_referencia(field_id):
+            # Lote, quadra e similares podem ter letras (ex.: 15B, 22A)
+            return "text"
         elif "number" in field_id_lower or "numero" in field_id_lower:
             return "number"
         
         return "text"
+    
+    def _is_numero_endereco_ou_referencia(self, field_id: str) -> bool:
+        """
+        Identificadores de lote, quadra ou número de endereço no imóvel
+        não são números puros: aceitam sufixos alfabéticos.
+        """
+        u = field_id.upper()
+        if u.startswith("UNIDADE_") and "NUMERO" in u:
+            return True
+        # Comprador PF/PJ — número da via (se existir no schema)
+        if u in ("COMPRADOR_PF_NUMERO", "COMPRADOR_PJ_NUMERO"):
+            return True
+        return False
     
     def _validate_cpf(self, value: str):
         """Valida CPF"""

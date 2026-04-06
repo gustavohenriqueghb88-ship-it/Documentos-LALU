@@ -48,26 +48,19 @@ export default function Home() {
     try {
       setIsLoading(true)
       setError(null)
-      
-      // Filtrar campos vazios antes de enviar
+
       const filteredData = Object.fromEntries(
         Object.entries(formData).filter(([_, value]) => 
           value !== null && value !== undefined && value !== ''
         )
       )
       
-      // Detectar tipo de comprador baseado nos campos preenchidos
-      const hasPF = Object.keys(filteredData).some(key => key.startsWith('COMPRADOR_PF_'))
-      const hasPJ = Object.keys(filteredData).some(key => key.startsWith('COMPRADOR_PJ_'))
-      const buyerType = hasPF && !hasPJ ? 'PF' : hasPJ && !hasPF ? 'PJ' : 'PF' // Default para PF
-      
       console.log('Enviando dados:', filteredData)
-      console.log('Tipo de comprador detectado:', buyerType)
       
       const response = await contractApi.fillContract(
         schema?.template_id || 'rota_do_sol',
         filteredData,
-        buyerType
+        'PF'
       )
       
       // ID principal (usado para compatibilidade) e lista de documentos retornados

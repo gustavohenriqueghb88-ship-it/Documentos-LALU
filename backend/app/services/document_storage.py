@@ -38,17 +38,18 @@ class DocumentStorage:
         """
         return str(self.temp_dir / f"{document_id}.docx")
     
-    def get_filled_file_path(self, document_id: str) -> str:
+    def get_filled_file_path(self, document_id: str, file_format: str = "pdf") -> str:
         """
-        Retorna o caminho do arquivo preenchido (PDF)
-        Agora sempre retorna PDF, não DOCX
+        Retorna o caminho do arquivo preenchido (PDF ou DOCX em ./output).
         """
-        # Remover extensão se houver
-        if document_id.endswith('.pdf'):
-            return str(self.output_dir / document_id)
-        if document_id.endswith('.docx'):
-            document_id = document_id.replace('.docx', '')
-        return str(self.output_dir / f"{document_id}.pdf")
+        base = document_id
+        if base.endswith(".pdf"):
+            base = base[:-4]
+        if base.endswith(".docx"):
+            base = base[:-5]
+        if file_format.lower() == "docx":
+            return str(self.output_dir / f"{base}.docx")
+        return str(self.output_dir / f"{base}.pdf")
     
     def get_temp_file_path(self, filename: str) -> str:
         """
@@ -90,6 +91,7 @@ class DocumentStorage:
         file_path = self.temp_dir / f"{document_id}.docx"
         filled_path = self.temp_dir / f"{document_id}_filled.docx"
         pdf_path = self.output_dir / f"{document_id}.pdf"
+        docx_out = self.output_dir / f"{document_id}.docx"
         
         deleted = False
         if file_path.exists():
@@ -102,6 +104,10 @@ class DocumentStorage:
         
         if pdf_path.exists():
             pdf_path.unlink()
+            deleted = True
+
+        if docx_out.exists():
+            docx_out.unlink()
             deleted = True
         
         return deleted

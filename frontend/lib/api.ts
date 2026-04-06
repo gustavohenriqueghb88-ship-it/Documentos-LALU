@@ -22,13 +22,18 @@ export const contractApi = {
     api.get('/api/templates'),
   
   // Preencher e gerar contrato
-  fillContract: (templateId: string, fields: Record<string, any>, buyerType?: string) => 
-    api.post('/api/fill', { template_id: templateId, fields, buyer_type: buyerType }),
-  
-  // Download do contrato (sempre PDF agora)
-  downloadContract: async (documentId: string) => {
+  fillContract: (templateId: string, fields: Record<string, any>, buyerType?: string) =>
+    api.post('/api/fill', {
+      template_id: templateId,
+      fields,
+      buyer_type: buyerType,
+    }),
+
+  // Download: PDF (padrão) ou Word (?format=docx)
+  downloadContract: async (documentId: string, format: 'pdf' | 'docx' = 'pdf') => {
     const response = await api.get(`/api/download/${documentId}`, {
       responseType: 'blob',
+      params: { format },
     })
     return response
   },

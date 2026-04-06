@@ -5,12 +5,14 @@ Agora suporta múltiplos documentos (ex: Quadro Resumo + Condições Gerais),
 mesclando tudo em um único PDF para download.
 """
 import os
+import shutil
 import uuid
 from typing import Dict, Any, Optional, List
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.config.parties import STATIC_PARTIES
 from app.services.document_filler import DocumentFiller
 from app.services.document_storage import DocumentStorage
 from app.services.template_service import TemplateService
@@ -24,8 +26,8 @@ pdf_generator = PDFGenerator()
 
 class FillTemplateRequest(BaseModel):
     template_id: Optional[str] = "rota_do_sol"
-    fields: Dict[str, Any]  # field_id -> value
-    buyer_type: Optional[str] = None  # "PF" ou "PJ" - se None, será detectado automaticamente
+    fields: Dict[str, Any]  # field_id -> value (sem VENDEDOR_*; injetados via STATIC_PARTIES)
+    buyer_type: Optional[str] = None  # legado; o template atual é apenas PF
 
 
 @router.post("/fill")
@@ -42,11 +44,15 @@ async def fill_template(request: FillTemplateRequest):
         print(f"[FILL] Recebendo requisição para preencher template: {request.template_id}", flush=True)
         print(f"[FILL] Campos recebidos: {len(request.fields)} campos", flush=True)
 
-        # Detectar ou usar buyer_type fornecido (mantido para logs e compatibilidade)
-        buyer_type = request.buyer_type
-        if not buyer_type:
-            buyer_type = filler._detect_buyer_type(request.fields) or "PF"
-        print(f"[FILL] Tipo de comprador detectado: {buyer_type}", flush=True)
+        user_fields_sanitized = {
+            k: v
+            for k, v in request.fields.items()
+            if not k.startswith("VENDEDOR_")
+        }
+        fields_to_fill: Dict[str, Any] = {**STATIC_PARTIES, **user_fields_sanitized}
+
+        buyer_type = request.buyer_type or filler._detect_buyer_type(fields_to_fill) or "PF"
+        print(f"[FILL] Tipo de comprador (log): {buyer_type}", flush=True)
 
         # Gerar ID único base para todos os documentos relacionados
         document_id = str(uuid.uuid4())
@@ -82,7 +88,7 @@ async def fill_template(request: FillTemplateRequest):
 
                 # Preencher DOCX em memória
                 print(f"[FILL] Preenchendo DOCX em memória...")
-                filled_doc = filler.fill_document_from_path(str(template_path), request.fields)
+                filled_doc = filler.fill_document_from_path(str(template_path), fields_to_fill)
                 print(f"[FILL] DOCX preenchido com sucesso")
 
                 # Salvar DOCX temporário
@@ -100,6 +106,10 @@ async def fill_template(request: FillTemplateRequest):
 
                 # Converter DOCX para PDF diretamente no diretório de saída
                 final_download_id = f"{document_id}_{doc_id}"
+                # Manter cópia em Word no output para download opcional
+                final_docx_path = os.path.join(storage.get_output_dir(), f"{final_download_id}.docx")
+                shutil.copy2(temp_docx_path, final_docx_path)
+                print(f"[FILL] DOCX final copiado para: {final_docx_path}", flush=True)
                 print(f"[FILL] Convertendo '{doc_id}' para PDF com ID: {final_download_id}")
                 print(f"[FILL] Diretório de saída: {storage.get_output_dir()}")
                 
@@ -182,8 +192,9 @@ async def fill_template(request: FillTemplateRequest):
         return {
             "success": True,
             "filled_document_id": primary_download_id,
-            "message": "Contratos gerados com sucesso em PDF.",
+            "message": "Contratos gerados com sucesso (PDF e Word disponíveis para download).",
             "format": "pdf",
+            "formats_available": ["pdf", "docx"],
             "documents_count": len(documents_info),
             "documents": documents_info,
         }

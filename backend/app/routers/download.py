@@ -2,7 +2,7 @@
 Rota para download de documentos preenchidos
 """
 import os
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from pathlib import Path
 from app.services.document_storage import DocumentStorage
@@ -12,37 +12,49 @@ storage = DocumentStorage()
 
 
 @router.get("/download/{document_id}")
-async def download_document(document_id: str):
+async def download_document(
+    document_id: str,
+    fmt: str = Query("pdf", alias="format", description="pdf ou docx"),
+):
     """
-    Faz download do contrato em PDF.
-    Agora sempre retorna PDF (não há mais opção de formato).
+    Download do contrato preenchido em PDF (padrão) ou Word (.docx).
+    Ex.: /api/download/UUID_quadro_resumo?format=docx
     """
     try:
-        # Buscar arquivo PDF (sempre PDF agora)
-        pdf_path = storage.get_filled_file_path(document_id)
+        fmt = (fmt or "pdf").lower().strip()
+        if fmt not in ("pdf", "docx"):
+            raise HTTPException(
+                status_code=400,
+                detail="Parâmetro 'format' deve ser 'pdf' ou 'docx'",
+            )
+
+        ext = ".pdf" if fmt == "pdf" else ".docx"
+        media_type = "application/pdf" if fmt == "pdf" else (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+
+        file_path = storage.get_filled_file_path(document_id, file_format=fmt)
         
         print(f"[DOWNLOAD] document_id recebido: {document_id}", flush=True)
-        print(f"[DOWNLOAD] Caminho construído: {pdf_path}", flush=True)
-        print(f"[DOWNLOAD] Arquivo existe: {os.path.exists(pdf_path)}", flush=True)
+        print(f"[DOWNLOAD] format: {fmt}, caminho: {file_path}", flush=True)
+        print(f"[DOWNLOAD] Arquivo existe: {os.path.exists(file_path)}", flush=True)
         
-        if not Path(pdf_path).exists():
-            # Tentar encontrar o arquivo por padrão (caso o nome não seja exatamente o esperado)
+        if not Path(file_path).exists():
             output_dir = storage.output_dir
             if output_dir.exists():
-                # Tentar encontrar arquivo que começa com o document_id
-                matching_files = list(output_dir.glob(f"{document_id}*.pdf"))
+                matching_files = list(output_dir.glob(f"{document_id}*{ext}"))
                 if matching_files:
-                    pdf_path = str(matching_files[0])
-                    print(f"[DOWNLOAD] Arquivo encontrado por padrão: {pdf_path}", flush=True)
+                    file_path = str(matching_files[0])
+                    print(f"[DOWNLOAD] Arquivo encontrado por padrão: {file_path}", flush=True)
                 else:
-                    # Listar todos os arquivos disponíveis para debug
-                    available_files = list(output_dir.glob("*.pdf"))
-                    print(f"[DOWNLOAD] Arquivos disponíveis no output: {[f.name for f in available_files]}", flush=True)
-                    print(f"[DOWNLOAD] Caminho absoluto do output: {output_dir.resolve()}", flush=True)
-                    
+                    available = list(output_dir.glob(f"*{ext}"))
+                    print(f"[DOWNLOAD] Arquivos {ext} no output: {[f.name for f in available]}", flush=True)
                     raise HTTPException(
                         status_code=404,
-                        detail=f"Documento não encontrado. Procurado: {pdf_path}. Arquivos disponíveis: {[f.name for f in available_files]}"
+                        detail=(
+                            f"Documento não encontrado. Procurado: {file_path}. "
+                            f"Arquivos disponíveis: {[f.name for f in available]}"
+                        ),
                     )
             else:
                 raise HTTPException(
@@ -50,12 +62,14 @@ async def download_document(document_id: str):
                     detail=f"Diretório de output não existe: {output_dir}"
                 )
         
-        # Gerar nome amigável para o arquivo
-        filename = f"contrato_{document_id[:8]}.pdf"
+        label = "contrato"
+        if "condicoes_gerais" in document_id:
+            label = "condicoes_gerais"
+        filename = f"{label}_{document_id[:8]}{ext}"
         
         return FileResponse(
-            path=pdf_path,
-            media_type="application/pdf",
+            path=file_path,
+            media_type=media_type,
             filename=filename,
             headers={
                 "Content-Disposition": f'attachment; filename="{filename}"'
